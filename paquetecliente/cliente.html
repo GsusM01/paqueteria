@@ -87,7 +87,7 @@
         // los nombres son IGUALES a los del SendAsync del Hub
 
         // --- 1. Llegó un envío nuevo ---
-        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo) {
+        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega) {
             contadorParadas = 0;
             cuerpoTabla.innerHTML = "";   // limpiar la tabla
 
@@ -100,7 +100,7 @@
 
             mapSeg.setView(origen, 13);   // el mapa viaja al origen
 
-            infoPaquete.innerHTML = "<b>Paquete en tránsito - Tipo: " + tipo + "</b>";
+            infoPaquete.innerHTML = "<b>Paquete en tránsito - Tipo: " + tipo + " - Entrega: " + fechaEntrega + "</b>";
             agregarFilaTabla("Origen (Almacén)", origen[0], origen[1], "Pendiente");
         });
 

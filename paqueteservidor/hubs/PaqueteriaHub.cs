@@ -6,11 +6,11 @@ namespace paqueteservidor.Hubs
     public class PaqueteriaHub : Hub
     {
         // ===== 1. REGISTRAR UN ENVÍO NUEVO =====
-        // HTML: conexion.invoke("NuevoEnvio", origenLat, origenLng, destLat, destLng, precio, tipo)
-        public async Task NuevoEnvio(double origenLat, double origenLng, double destLat, double destLng, string precio, string tipo)
+        // HTML: conexion.invoke("NuevoEnvio", origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega)
+        public async Task NuevoEnvio(double origenLat, double origenLng, double destLat, double destLng, string precio, string tipo, string fechaEntrega)
         {
-            // HTML: conexion.on("RecibirEnvio", (origenLat, origenLng, destLat, destLng, precio, tipo) => ...)
-            await Clients.All.SendAsync("RecibirEnvio", origenLat, origenLng, destLat, destLng, precio, tipo);
+            // HTML: conexion.on("RecibirEnvio", (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega) => ...)
+            await Clients.All.SendAsync("RecibirEnvio", origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega);
         }
 
         // ===== 2. AGREGAR UNA PARADA O ENTREGAR =====

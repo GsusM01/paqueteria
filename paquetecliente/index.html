@@ -20,6 +20,7 @@
         <option value="Pesado">Pesado</option>
         <option value="Frágil">Frágil</option>
     </select>
+    <input type="text" id="txtFechaEntrega" placeholder="Fecha de entrega dd/mm/aaaa">
     <button id="btnEnviar">Registrar Envío</button>
     <p><b>Origen:</b> se toma tu ubicación. <b>Destino:</b> haz clic en el mapa.</p>
     <!-- el mapa NECESITA un alto, si no, no se ve -->
@@ -48,6 +49,7 @@
         // ============ ③ AGARRAR LOS ELEMENTOS (por su id) ============
         const txtPrecio = document.getElementById("txtPrecio");
         const txtTipo = document.getElementById("txtTipo");
+        const txtFechaEntrega = document.getElementById("txtFechaEntrega");
         const btnEnviar = document.getElementById("btnEnviar");
         const infoPaquete = document.getElementById("infoPaquete");
         const cuerpoTabla = document.getElementById("cuerpoTabla");
@@ -143,6 +145,10 @@
                 alert("Selecciona un destino en el mapa");
                 return;
             }
+            if (txtFechaEntrega.value == "") {
+                alert("Escribe la fecha de entrega");
+                return;
+            }
             try {
                 // el nombre "NuevoEnvio" es IGUAL al método del Hub
                 await conexion.invoke("NuevoEnvio",
@@ -151,7 +157,8 @@
                     destinoLat,         // destLat   (double)
                     destinoLng,         // destLng   (double)
                     txtPrecio.value,    // precio    (string)
-                    txtTipo.value);     // tipo      (string)
+                    txtTipo.value,      // tipo      (string)
+                    txtFechaEntrega.value);   // fechaEntrega (string) ← nuevo, al final
             } catch (error) {
                 alert("error: " + error);
             }
@@ -192,7 +199,7 @@
         // los nombres son IGUALES a los del SendAsync del Hub
 
         // --- 1. Llegó un envío nuevo ---
-        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo) {
+        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega) {
             estadoActual = "Pendiente";
             contadorParadas = 0;
             cuerpoTabla.innerHTML = "";   // limpiar la tabla
@@ -212,7 +219,7 @@
 
             mapSeg.setView(origen, 13);   // el mapa viaja al origen
 
-            infoPaquete.innerHTML = "<b>Paquete " + tipo + "</b> | Precio: $" + precio;
+            infoPaquete.innerHTML = "<b>Paquete " + tipo + "</b> | Precio: $" + precio + " | Entrega: " + fechaEntrega;
             agregarFilaTabla("Origen (Almacén)", origen[0], origen[1], estadoActual);
         });
 
