@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envíos y Seguimiento</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <style>
+        .mapa { height: 400px; width: 100%; margin-bottom: 20px; border: 2px solid black; }
+        .oculto { display: none; }
+        /* Estilos simples para la tabla */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
+        th { background-color: #eee; }
+    </style>
+</head>
+<body>
+
+    <!-- ================= SECCIÓN 1: FORMULARIO ================= -->
+    <div id="seccionFormulario">
+        <h1>Crear Nuevo Envío</h1>
+        
+        <label>Precio ($):</label> <input type="text" id="txtPrecio"><br><br>
+        <label>Tipo de Paquete:</label> 
+        <select id="txtTipo">
+            <option value="Ligero">Ligero</option>
+            <option value="Pesado">Pesado</option>
+            <option value="Frágil">Frágil</option>
+        </select><br><br>
+        
+        <p><b>Origen:</b> Se tomará tu ubicación actual automáticamente.</p>
+        <p><b>Destino:</b> Haz clic en el mapa para elegir el destino.</p>
+        
+        <div id="mapaFormulario" class="mapa"></div>
+        <button id="btnEnviar">Registrar Envío</button>
+    </div>
+
+    <!-- ================= SECCIÓN 2: SEGUIMIENTO Y TABLA ================= -->
+    <div id="seccionSeguimiento" class="oculto">
+        <h1>Panel de Seguimiento</h1>
+        <p id="infoPaquete" style="font-size: 18px;"></p>
+
+        <h3>Ruta del Paquete:</h3>
+        <div id="mapaSeguimiento" class="mapa"></div>
+
+        <!-- LA TABLA SOLICITADA -->
+        <h3>Historial del Paquete (Tabla)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Lugar</th>
+                    <th>Coordenadas (Lat, Lng)</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody id="cuerpoTabla">
+                <!-- Aquí se irán agregando las filas -->
+            </tbody>
+        </table>
+        <br>
+        <button id="btnNuevoPaquete">Crear un Nuevo Paquete</button>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="signalr.js"></script>
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let miLatitud = 0, miLongitud = 0;
+        let destinoLat = 0, destinoLng = 0;
+        
+        let rutaCoordenadas = []; 
+        let lineaRuta = null; 
+        let marcadorDestinoSeg = null; // Guardará el pin de destino en el segundo mapa
+        let estadoActual = "Pendiente";
+        let contadorParadas = 0;
+
+        // --- 1. MAPA DEL FORMULARIO ---
+        var mapForm = L.map('mapaFormulario').setView([19.8835847, -97.3934342], 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapForm);
+        var marcadorDestino = null;
+
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            miLatitud = pos.coords.latitude;
+            miLongitud = pos.coords.longitude;
+            L.marker([miLatitud, miLongitud]).addTo(mapForm).bindPopup("<b>Mi Origen</b>").openPopup();
+            mapForm.setView([miLatitud, miLongitud], 14);
+        });
+
+        mapForm.on('click', function(e) {
+            destinoLat = e.latlng.lat;
+            destinoLng = e.latlng.lng;
+            if (marcadorDestino !== null) mapForm.removeLayer(marcadorDestino);
+            marcadorDestino = L.marker([destinoLat, destinoLng]).addTo(mapForm).bindPopup("<b>Destino</b>").openPopup();
+        });
+
+        // --- 2. MAPA DE SEGUIMIENTO ---
+        var mapSeg = L.map('mapaSeguimiento').setView([19.8835847, -97.3934342], 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapSeg);
+
+        // FUNCIÓN: Dibujar o actualizar la línea roja en el mapa
+        function actualizarLinea() {
+            if(lineaRuta) mapSeg.removeLayer(lineaRuta);
+            lineaRuta = L.polyline(rutaCoordenadas, {color: 'red', weight: 4}).addTo(mapSeg);
+        }
+
+        // FUNCIÓN: Agregar una fila a la tabla HTML
+        function agregarFilaTabla(lugar, lat, lng, estado) {
+            const tbody = document.getElementById("cuerpoTabla");
+            const tr = document.createElement("tr");
+            // Reducimos los decimales con .toFixed(5) para que no se vea tan largo en la tabla
+            tr.innerHTML = `
+                <td>${lugar}</td>
+                <td>${lat.toFixed(5)}, ${lng.toFixed(5)}</td>
+                <td><b>${estado}</b></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // --- 3. EVENTOS CLIC EN EL MAPA DE SEGUIMIENTO (Trazando la ruta) ---
+
+        // A) Cuando damos clic en cualquier parte del mapa (Agregar Parada)
+        mapSeg.on('click', async function(e) {
+            if (estadoActual === "Entregado") return; // Si ya se entregó, ignorar clics
+
+            estadoActual = "En ruta";
+            contadorParadas++;
+            let nuevaParada = [e.latlng.lat, e.latlng.lng];
+            
+            // 1. Agregamos el punto a la ruta y al mapa
+            rutaCoordenadas.push(nuevaParada);
+            L.marker(nuevaParada).addTo(mapSeg).bindPopup(`Parada ${contadorParadas}`);
+            actualizarLinea();
+
+            // 2. Agregamos la fila a la tabla
+            agregarFilaTabla(`Parada ${contadorParadas}`, nuevaParada[0], nuevaParada[1], estadoActual);
+
+            // 3. Avisamos al servidor
+            await conexion.invoke("ActualizarRuta", nuevaParada[0].toString(), nuevaParada[1].toString(), estadoActual);
+        });
+
+
+        // --- 4. CONEXIÓN SIGNALR ---
+        const conexion = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5117/paquetes") // AJUSTA TU PUERTO
+            .withAutomaticReconnect()
+            .build();
+
+        // Botón Enviar Formulario
+        document.getElementById("btnEnviar").addEventListener("click", async () => {
+            if (destinoLat === 0) return alert("Selecciona un destino");
+            let precio = document.getElementById("txtPrecio").value;
+            let tipo = document.getElementById("txtTipo").value;
+
+            await conexion.invoke("NuevoEnvio", 
+                miLatitud.toString(), miLongitud.toString(), 
+                destinoLat.toString(), destinoLng.toString(), 
+                precio, tipo
+            );
+
+            document.getElementById("seccionFormulario").classList.add("oculto");
+            document.getElementById("seccionSeguimiento").classList.remove("oculto");
+            setTimeout(() => mapSeg.invalidateSize(), 500);
+        });
+
+        // Recibir el paquete nuevo e Inicializar el mapa de seguimiento
+        conexion.on("RecibirEnvio", function(oLat, oLng, dLat, dLng, precio, tipo) {
+            estadoActual = "Pendiente";
+            contadorParadas = 0;
+            document.getElementById("cuerpoTabla").innerHTML = ""; // Limpiar tabla
+            
+            let origin = [parseFloat(oLat), parseFloat(oLng)];
+            let dest = [parseFloat(dLat), parseFloat(dLng)];
+            
+            // INICIAMOS LA RUTA SOLO CON EL ORIGEN (Sin línea aún)
+            rutaCoordenadas = [origin]; 
+            
+            L.marker(origin).addTo(mapSeg).bindPopup("<b>Origen</b>");
+            
+            // Colocamos el destino y le asignamos un evento clic especial para "Entregar"
+            marcadorDestinoSeg = L.marker(dest).addTo(mapSeg);
+            marcadorDestinoSeg.bindPopup("<b>¡Haz Clic aquí para Entregar!</b>").openPopup();
+            
+            // B) Cuando damos clic EXACTAMENTE en el marcador de destino
+            marcadorDestinoSeg.on('click', async function() {
+                if (estadoActual === "Entregado") return;
+                
+                estadoActual = "Entregado";
+                rutaCoordenadas.push(dest); // Añadimos el destino final a la línea
+                actualizarLinea();
+                
+                agregarFilaTabla("Destino Final", dest[0], dest[1], estadoActual);
+                await conexion.invoke("ActualizarRuta", dest[0].toString(), dest[1].toString(), estadoActual);
+                
+                alert("¡Paquete Entregado Exitosamente!");
+            });
+
+            // Ajustamos la vista para que se vean ambos pines
+            mapSeg.fitBounds(L.latLngBounds([origin, dest]));
+
+            // Info general arriba y primera fila de la tabla
+            document.getElementById("infoPaquete").innerHTML = `<b>Paquete ${tipo}</b> | Precio: $${precio}`;
+            agregarFilaTabla("Origen (Almacén)", origin[0], origin[1], estadoActual);
+        });
+
+        // Botón Nuevo Paquete (Reinicia todo)
+        document.getElementById("btnNuevoPaquete").addEventListener("click", () => {
+            window.location.reload(); // Recarga la página para empezar limpio (Mientras la Persona B no meta el LocalStorage)
+        });
+
+        conexion.start().then(() => console.log("Listo"));
+    </script>
+</body>
+</html>

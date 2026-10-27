@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vista Cliente - Seguimiento</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px; }
+        .mapa { height: 500px; width: 100%; border: 3px solid #0056b3; border-radius: 8px; margin-bottom: 20px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
+        th, td { border: 1px solid #aaa; padding: 10px; text-align: center; }
+        th { background-color: #0056b3; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1 style="color: #0056b3;">Rastreo de tu Paquete</h1>
+    <p id="infoPaquete" style="font-size: 18px; font-weight: bold;">Esperando a que se registre un nuevo envío...</p>
+
+    <div id="mapaSeguimiento" class="mapa"></div>
+
+    <h3>Historial del Recorrido</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Ubicación</th>
+                <th>Coordenadas (Lat, Lng)</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody id="cuerpoTabla">
+            <!-- Aquí se irán agregando las filas automáticamente -->
+        </tbody>
+    </table>
+
+    <!-- SCRIPTS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="signalr.js"></script>
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let rutaCoordenadas = []; 
+        let lineaRuta = null; 
+        let contadorParadas = 0;
+
+        // --- 1. INICIALIZAR EL MAPA ---
+        var mapSeg = L.map('mapaSeguimiento').setView([19.8835847, -97.3934342], 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapSeg);
+
+        // FUNCIÓN: Dibujar o actualizar la línea roja en el mapa
+        function actualizarLinea() {
+            if(lineaRuta) mapSeg.removeLayer(lineaRuta);
+            lineaRuta = L.polyline(rutaCoordenadas, {color: 'blue', weight: 5, dashArray: '10, 10'}).addTo(mapSeg);
+        }
+
+        // FUNCIÓN: Agregar fila a la tabla
+        function agregarFilaTabla(lugar, lat, lng, estado) {
+            const tbody = document.getElementById("cuerpoTabla");
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${lugar}</td>
+                <td>${lat.toFixed(5)}, ${lng.toFixed(5)}</td>
+                <td><span style="color: ${estado === 'Entregado' ? 'green' : 'black'}; font-weight: bold;">${estado}</span></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // --- 2. CONEXIÓN SIGNALR ---
+        const conexion = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5117/paquetes") // AJUSTA TU PUERTO AQUÍ
+            .withAutomaticReconnect()
+            .build();
+
+        // A) Cuando el Administrador crea un nuevo envío
+        conexion.on("RecibirEnvio", function(oLat, oLng, dLat, dLng, precio, tipo) {
+            contadorParadas = 0;
+            document.getElementById("cuerpoTabla").innerHTML = ""; // Limpiar tabla
+            
+            let origin = [parseFloat(oLat), parseFloat(oLng)];
+            let dest = [parseFloat(dLat), parseFloat(dLng)];
+            
+            // Reiniciamos la ruta solo con el origen
+            rutaCoordenadas = [origin]; 
+            
+            // Limpiamos marcadores viejos si los hubiera (dejando solo el mapa base)
+            mapSeg.eachLayer((layer) => {
+                if(layer instanceof L.Marker || layer instanceof L.Polyline) mapSeg.removeLayer(layer);
+            });
+
+            // Ponemos marcadores iniciales (Nota: NO tienen evento de clic)
+            L.marker(origin).addTo(mapSeg).bindPopup("<b>Origen (Salió de aquí)</b>").openPopup();
+            L.marker(dest).addTo(mapSeg).bindPopup("<b>Destino Final</b>");
+
+            // Centramos el mapa
+            mapSeg.fitBounds(L.latLngBounds([origin, dest]));
+
+            // Actualizamos textos
+            document.getElementById("infoPaquete").innerHTML = `Paquete en tránsito - Tipo: ${tipo}`;
+            agregarFilaTabla("Origen (Almacén)", origin[0], origin[1], "Pendiente");
+        });
+
+        // B) Cuando el Administrador agrega una parada o entrega el paquete
+        conexion.on("RecibirActualizacion", function(nuevaLat, nuevaLng, estado) {
+            let punto = [parseFloat(nuevaLat), parseFloat(nuevaLng)];
+            
+            // Agregamos el punto a nuestra línea
+            rutaCoordenadas.push(punto);
+            actualizarLinea();
+
+            if (estado === "En ruta") {
+                // Si es una parada intermedia, ponemos un marcador nuevo
+                contadorParadas++;
+                L.marker(punto).addTo(mapSeg).bindPopup(`Parada ${contadorParadas}`);
+                agregarFilaTabla(`Parada ${contadorParadas}`, punto[0], punto[1], estado);
+                
+            } else if (estado === "Entregado") {
+                // Si es entregado, ya no ponemos marcador porque el destino ya existe desde el inicio
+                agregarFilaTabla("Destino Final", punto[0], punto[1], estado);
+                document.getElementById("infoPaquete").innerHTML = `Paquete Entregado Exitosamente`;
+            }
+        });
+
+        conexion.start().then(() => console.log("Cliente conectado. Esperando actualizaciones..."));
+    </script>
+</body>
+</html>

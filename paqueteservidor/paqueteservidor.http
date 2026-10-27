@@ -1,0 +1,6 @@
+@paqueteservidor_HostAddress = http://localhost:5117
+
+GET {{paqueteservidor_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
