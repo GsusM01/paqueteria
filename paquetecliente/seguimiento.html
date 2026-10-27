@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguimiento</title>
+    <!-- Leaflet (mapa): los estilos van en el head -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+    <!-- ============ ① LO QUE SE VE ============ -->
+    <!-- Esta página SOLO mira: no tiene botones, no hace invoke -->
+
+    <h3>Rastreo de tu Paquete</h3>
+    <a href="index.html">Formulario</a> | <a href="tabla.html">Tabla de envíos</a>
+    <br><br>
+
+    <p id="infoPaquete"></p>
+
+    <!-- el mapa NECESITA un alto, si no, no se ve -->
+    <div id="mapaSeguimiento" style="height: 500px;"></div>
+
+    <h4>Puntos de la ruta</h4>
+    <div id="contenedorRuta"></div>
+
+    <h4>Historial de estados</h4>
+    <div id="contenedorHistorial"></div>
+
+    <!-- ============ ② LA LIBRERÍA ============ -->
+    <script src="signalr.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // ============ ③ AGARRAR LOS ELEMENTOS (por su id) ============
+        const infoPaquete = document.getElementById("infoPaquete");
+        const contenedorRuta = document.getElementById("contenedorRuta");
+        const contenedorHistorial = document.getElementById("contenedorHistorial");
+
+        // variables: let porque van a cambiar
+        let marcadores = [];    // los pines dibujados, para poder borrarlos y volver a dibujar
+        let lineaRuta = null;   // la línea azul de la ruta
+
+        // el paquete guardado (como el "alumnos" del profe, pero es UNO solo: si no hay, queda null)
+        let paquete = JSON.parse(localStorage.getItem("paquete"));
+
+        // --- MAPA --- centrado en México: [latitud, longitud], zoom
+        const mapSeg = L.map("mapaSeguimiento").setView([23.6, -102.5], 5);
+
+        // los "dibujos" del mapa (calles, ríos...). Sin esto se ve gris
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(mapSeg);
+
+        // Dibuja todo desde el paquete: origen, destino, cada punto y la línea
+        function DibujarRuta() {
+            // borrar lo que había dibujado
+            marcadores.forEach(marcador => {
+                marcador.remove();
+            });
+            marcadores = [];
+            if (lineaRuta != null) {
+                lineaRuta.remove();
+                lineaRuta = null;
+            }
+            if (paquete == null) {
+                return;
+            }
+
+            marcadores.push(L.marker([paquete.origen.lat, paquete.origen.lng]).addTo(mapSeg).bindPopup("<b>Origen</b>"));
+            marcadores.push(L.marker([paquete.destino.lat, paquete.destino.lng]).addTo(mapSeg).bindPopup("<b>Destino</b>"));
+
+            // la línea empieza en el origen y pasa por cada punto de la ruta
+            const puntos = [[paquete.origen.lat, paquete.origen.lng]];
+            let n = 0;
+            paquete.ruta.forEach(punto => {
+                n++;
+                marcadores.push(L.marker([punto.lat, punto.lng]).addTo(mapSeg).bindPopup("Punto " + n + "<br>" + punto.fecha));
+                puntos.push([punto.lat, punto.lng]);
+            });
+            // ya entregado: la línea llega hasta el destino
+            if (paquete.estado == "Entregado") {
+                puntos.push([paquete.destino.lat, paquete.destino.lng]);
+            }
+            lineaRuta = L.polyline(puntos, { color: "blue" }).addTo(mapSeg);
+        }
+
+        // Todo lo de texto (como el MostrarALumnos del profe)
+        function MostrarPaquete() {
+            contenedorRuta.innerHTML = "";
+            contenedorHistorial.innerHTML = "";
+            if (localStorage.getItem("paquete")) {
+                // color según el estado (como la solución 6 de la guía)
+                let color = "black";
+                if (paquete.estado == "Entregado") {
+                    color = "green";
+                }
+                infoPaquete.innerHTML = "<b>Paquete " + paquete.tipo + "</b>" +
+                    " | Estado: <b style='color:" + color + "'>" + paquete.estado + "</b>" +
+                    " | Fecha de entrega: <b>" + paquete.fechaEntrega + "</b>";
+
+                let n = 0;
+                paquete.ruta.forEach(punto => {
+                    n++;
+                    const p = document.createElement("p");
+                    p.innerHTML = "Punto " + n + ": " + punto.lat.toFixed(4) + ", " + punto.lng.toFixed(4) + " (" + punto.fecha + ")";
+                    contenedorRuta.appendChild(p);
+                });
+                if (n == 0) {
+                    contenedorRuta.innerHTML = "Todavía no hay puntos";
+                }
+
+                paquete.historial.forEach(cambio => {
+                    const p = document.createElement("p");
+                    p.innerHTML = "<b>" + cambio.estado + "</b> - " + cambio.fecha;
+                    contenedorHistorial.appendChild(p);
+                });
+            } else {
+                infoPaquete.innerHTML = "No hay envíos registrados";
+            }
+            DibujarRuta();
+        }
+
+        MostrarPaquete();   // al abrir o recargar la página
+
+        // ============ ④ CREAR LA CONEXIÓN ============
+        // puerto: paqueteservidor/Properties/launchSettings.json   ruta: MapHub en Program.cs
+        const conexion = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5117/paquetes")
+            .withAutomaticReconnect()
+            .build();
+
+        // ============ ⑤ YO MANDO (invoke) ============
+        // (nada: esta página solo mira)
+
+        // ============ ⑥ YO RECIBO (on) ============
+        // los nombres son IGUALES a los del SendAsync del Hub
+        // En cada uno: cambio el paquete, lo guardo en localStorage y vuelvo a mostrar
+
+        // --- 1. Llegó un envío nuevo (reemplaza al anterior) ---
+        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion) {
+            paquete = {
+                id: 1,                                    // es UN solo paquete
+                origen: { lat: origenLat, lng: origenLng },
+                destino: { lat: destLat, lng: destLng },
+                precio: precio,
+                tipo: tipo,
+                estado: "Recibido",
+                fechaEntrega: fechaEntrega,
+                fechaCreacion: fechaCreacion,
+                ruta: [],
+                historial: [ { estado: "Recibido", fecha: fechaCreacion } ]
+            };
+            localStorage.setItem("paquete", JSON.stringify(paquete));
+            MostrarPaquete();
+        });
+
+        // --- 2. Llegó un punto nuevo de la ruta ---
+        conexion.on("RecibirActualizacion", function (lat, lng, fecha) {
+            // sin paquete o ya entregado: se ignora
+            if (paquete == null || paquete.estado == "Entregado") {
+                return;
+            }
+            paquete.ruta.push({ lat: lat, lng: lng, fecha: fecha });
+            localStorage.setItem("paquete", JSON.stringify(paquete));
+            MostrarPaquete();
+        });
+
+        // --- 3. Cambió el estado ---
+        conexion.on("EstadoCambiado", function (estado, fecha) {
+            // ya entregado: se ignora (así "Entregado" no se guarda dos veces)
+            if (paquete == null || paquete.estado == "Entregado") {
+                return;
+            }
+            paquete.estado = estado;
+            paquete.historial.push({ estado: estado, fecha: fecha });
+            localStorage.setItem("paquete", JSON.stringify(paquete));
+            MostrarPaquete();
+        });
+
+        // ============ ⑦ ARRANCAR LA CONEXIÓN ============
+        conexion.start()
+            .then(() => console.log("conexion exitosa"))
+            .catch(e => console.log("Error al conectar: " + e));
+    </script>
+</body>
+</html>
