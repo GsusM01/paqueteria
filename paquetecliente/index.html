@@ -82,8 +82,15 @@
             maxZoom: 19
         }).addTo(mapForm);
 
-        // Origen = mi ubicación (como el profe: GeoSuccess y GeoError)
-        navigator.geolocation.getCurrentPosition(GeoSuccess, GeoError);
+        // Origen = mi ubicación (como el Ejercicio_1 del profe: ObtenerUbicacion, GeoSuccess y GeoError)
+        function ObtenerUbicacion() {
+            if (navigator.geolocation) {
+                // el navegador pide permiso; cuando responde llama a GeoSuccess o a GeoError
+                navigator.geolocation.getCurrentPosition(GeoSuccess, GeoError);
+            } else {
+                lblOrigen.innerHTML = "<b>Origen:</b> tu navegador no tiene geolocalización";
+            }
+        }
 
         function GeoSuccess(posicion) {
             miLatitud = posicion.coords.latitude;
@@ -92,10 +99,22 @@
             lblOrigen.innerHTML = "<b>Origen:</b> " + miLatitud.toFixed(4) + ", " + miLongitud.toFixed(4);
         }
 
+        // cada error tiene su código (como el switch del profe)
         function GeoError(e) {
-            lblOrigen.innerHTML = "<b>Origen:</b> no se pudo obtener tu ubicación";
-            alert("No se pudo obtener tu ubicación (¿le diste Permitir?)");
+            switch (e.code) {
+                case e.PERMISSION_DENIED:
+                    lblOrigen.innerHTML = "<b>Origen:</b> no diste permiso de ubicación (clic en el candado → Ubicación → Permitir)";
+                    break;
+                case e.POSITION_UNAVAILABLE:
+                    lblOrigen.innerHTML = "<b>Origen:</b> ubicación no disponible";
+                    break;
+                case e.TIMEOUT:
+                    lblOrigen.innerHTML = "<b>Origen:</b> tiempo de espera terminado, recarga la página";
+                    break;
+            }
         }
+
+        ObtenerUbicacion();   // pedir la ubicación al abrir la página
 
         // Destino = clic en el mapa (como el onMapClick del profe)
         function onMapClick(e) {
