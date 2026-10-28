@@ -128,7 +128,7 @@
         mapForm.on("click", onMapClick);
 
         const conexion = new signalR.HubConnectionBuilder()
-            .withUrl("http://localhost:5117/paquetes")
+            .withUrl("https://paqueteria-5jx7.onrender.com/paquetes")
             .withAutomaticReconnect()
             .build();
 
