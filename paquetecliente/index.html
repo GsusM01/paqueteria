@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Formulario de Envío</title>
-    <!-- Leaflet (mapa): los estilos van en el head -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
-    <!-- ============ ① LO QUE SE VE ============ -->
 
     <h3>Formulario de Envío</h3>
     <a href="tabla.html">Tabla de envíos</a> | <a href="seguimiento.html">Seguimiento</a>
@@ -33,15 +31,12 @@
     <p id="lblDestino"><b>Destino:</b> haz clic en el mapa</p>
     <div id="contenedor"></div>
 
-    <!-- el mapa NECESITA un alto, si no, no se ve -->
     <div id="mapaFormulario" style="height: 400px;"></div>
 
-    <!-- ============ ② LA LIBRERÍA ============ -->
     <script src="signalr.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // ============ ③ AGARRAR LOS ELEMENTOS (por su id) ============
         const txtPrecio = document.getElementById("txtPrecio");
         const txtTipo = document.getElementById("txtTipo");
         const txtFechaEntrega = document.getElementById("txtFechaEntrega");
@@ -50,17 +45,14 @@
         const lblDestino = document.getElementById("lblDestino");
         const contenedor = document.getElementById("contenedor");
 
-        // variables: let porque van a cambiar
-        let miLatitud = 0;          // origen (mi ubicación)
+        let miLatitud = 0;
         let miLongitud = 0;
-        let destinoLat = 0;         // destino (clic en el mapa)
+        let destinoLat = 0;
         let destinoLng = 0;
-        let marcadorDestino = null; // pin del destino
+        let marcadorDestino = null;
 
-        // el paquete guardado (como el "alumnos" del profe, pero es UNO solo, no una lista: si no hay, queda null)
         let paquete = JSON.parse(localStorage.getItem("paquete"));
 
-        // como el MostrarNumeroClicks del profe: si hay algo guardado lo muestra, si no, avisa
         function MostrarPaquete() {
             if (localStorage.getItem("paquete")) {
                 contenedor.innerHTML = "<b>Paquete registrado:</b> " + paquete.tipo +
@@ -72,20 +64,16 @@
             }
         }
 
-        MostrarPaquete();   // al abrir o recargar la página
+        MostrarPaquete();
 
-        // --- MAPA --- centrado en México: [latitud, longitud], zoom
         const mapForm = L.map("mapaFormulario").setView([23.6, -102.5], 5);
 
-        // los "dibujos" del mapa (calles, ríos...). Sin esto se ve gris
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19
         }).addTo(mapForm);
 
-        // Origen = mi ubicación (como el Ejercicio_1 del profe: ObtenerUbicacion, GeoSuccess y GeoError)
         function ObtenerUbicacion() {
             if (navigator.geolocation) {
-                // el navegador pide permiso; cuando responde llama a GeoSuccess o a GeoError
                 navigator.geolocation.getCurrentPosition(GeoSuccess, GeoError);
             } else {
                 lblOrigen.innerHTML = "<b>Origen:</b> tu navegador no tiene geolocalización";
@@ -99,7 +87,6 @@
             lblOrigen.innerHTML = "<b>Origen:</b> " + miLatitud.toFixed(4) + ", " + miLongitud.toFixed(4);
         }
 
-        // cada error tiene su código (como el switch del profe)
         function GeoError(e) {
             switch (e.code) {
                 case e.PERMISSION_DENIED:
@@ -114,14 +101,13 @@
             }
         }
 
-        ObtenerUbicacion();   // pedir la ubicación al abrir la página
+        ObtenerUbicacion();
 
-        // Destino = clic en el mapa (como el onMapClick del profe)
         function onMapClick(e) {
             destinoLat = e.latlng.lat;
             destinoLng = e.latlng.lng;
             if (marcadorDestino != null) {
-                marcadorDestino.remove();   // borra el destino anterior
+                marcadorDestino.remove();
             }
             marcadorDestino = L.marker([destinoLat, destinoLng]).addTo(mapForm).bindPopup("<b>Destino</b>").openPopup();
             lblDestino.innerHTML = "<b>Destino:</b> " + destinoLat.toFixed(4) + ", " + destinoLng.toFixed(4);
@@ -129,14 +115,11 @@
 
         mapForm.on("click", onMapClick);
 
-        // ============ ④ CREAR LA CONEXIÓN ============
-        // puerto: paqueteservidor/Properties/launchSettings.json   ruta: MapHub en Program.cs
         const conexion = new signalR.HubConnectionBuilder()
             .withUrl("http://localhost:5117/paquetes")
             .withAutomaticReconnect()
             .build();
 
-        // ============ ⑤ YO MANDO (invoke) ============
         btnEnviar.addEventListener("click", async () => {
             if (miLatitud == 0) {
                 alert("Todavía no tengo tu ubicación (¿le diste Permitir?)");
@@ -146,7 +129,6 @@
                 alert("Selecciona un destino en el mapa");
                 return;
             }
-            // el input es type="number": si escriben letras, .value queda vacío
             if (txtPrecio.value == "") {
                 alert("Escribe el precio (solo números)");
                 return;
@@ -155,34 +137,28 @@
                 alert("Escribe la fecha de entrega");
                 return;
             }
-            // es UN solo paquete: si ya hay uno, preguntar antes de reemplazarlo
             if (localStorage.getItem("paquete")) {
                 if (!confirm("Ya hay un paquete registrado. ¿Quieres reemplazarlo?")) {
                     return;
                 }
             }
             try {
-                // el nombre "NuevoEnvio" es IGUAL al método del Hub
                 await conexion.invoke("NuevoEnvio",
-                    miLatitud,                // origenLat    (double)
-                    miLongitud,               // origenLng    (double)
-                    destinoLat,               // destLat      (double)
-                    destinoLng,               // destLng      (double)
-                    txtPrecio.value,          // precio       (string)
-                    txtTipo.value,            // tipo         (string)
-                    txtFechaEntrega.value);   // fechaEntrega (string)
+                    miLatitud,
+                    miLongitud,
+                    destinoLat,
+                    destinoLng,
+                    txtPrecio.value,
+                    txtTipo.value,
+                    txtFechaEntrega.value);
             } catch (error) {
                 alert("error: " + error);
             }
         });
 
-        // ============ ⑥ YO RECIBO (on) ============
-        // los nombres son IGUALES a los del SendAsync del Hub
-        // Aquí se guarda (y no antes del invoke): así TODAS las pestañas guardan lo mismo, con la fecha del servidor
         conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion) {
-            // el objeto, como el "estudiante" del profe
             paquete = {
-                id: 1,                                    // es UN solo paquete
+                id: 1,
                 origen: { lat: origenLat, lng: origenLng },
                 destino: { lat: destLat, lng: destLng },
                 precio: precio,
@@ -190,14 +166,13 @@
                 estado: "Recibido",
                 fechaEntrega: fechaEntrega,
                 fechaCreacion: fechaCreacion,
-                ruta: [],                                 // los puntos se agregan en tabla.html (Modificar)
+                ruta: [],
                 historial: [ { estado: "Recibido", fecha: fechaCreacion } ]
             };
             localStorage.setItem("paquete", JSON.stringify(paquete));
             MostrarPaquete();
         });
 
-        // ============ ⑦ ARRANCAR LA CONEXIÓN ============
         conexion.start()
             .then(() => console.log("conexion exitosa"))
             .catch(e => console.log("Error al conectar: " + e));

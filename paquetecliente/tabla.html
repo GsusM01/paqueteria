@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tabla de Envíos</title>
-    <!-- Leaflet (mapa): los estilos van en el head -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
         table, th, td { border: 1px solid black; }
     </style>
 </head>
 <body>
-    <!-- ============ ① LO QUE SE VE ============ -->
 
     <h3>Tabla de Envíos</h3>
     <a href="index.html">Formulario</a> | <a href="seguimiento.html">Seguimiento</a>
@@ -32,7 +30,6 @@
     </table>
     <div id="contenedor"></div>
 
-    <!-- Panel de Modificar: empieza escondido y se abre con el botón Modificar -->
     <div id="panelModificar" style="display: none;">
         <h3>Modificar paquete</h3>
         <label for="txtEstado">Estado</label>
@@ -43,18 +40,15 @@
         </select>
         <button id="btnCambiarEstado">Cambiar estado</button>
         <p>Haz clic en el mapa para agregar un punto a la ruta.</p>
-        <!-- el mapa NECESITA un alto, si no, no se ve -->
         <div id="mapaRuta" style="height: 400px;"></div>
         <h4>Puntos de la ruta</h4>
         <div id="contenedorRuta"></div>
     </div>
 
-    <!-- ============ ② LA LIBRERÍA ============ -->
     <script src="signalr.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // ============ ③ AGARRAR LOS ELEMENTOS (por su id) ============
         const cuerpoTabla = document.getElementById("cuerpoTabla");
         const contenedor = document.getElementById("contenedor");
         const panelModificar = document.getElementById("panelModificar");
@@ -62,15 +56,12 @@
         const btnCambiarEstado = document.getElementById("btnCambiarEstado");
         const contenedorRuta = document.getElementById("contenedorRuta");
 
-        // variables: let porque van a cambiar
-        let mapaRuta = null;    // el mapa del panel: se crea la primera vez que se abre Modificar
-        let marcadores = [];    // los pines dibujados, para poder borrarlos y volver a dibujar
-        let lineaRuta = null;   // la línea roja de la ruta
+        let mapaRuta = null;
+        let marcadores = [];
+        let lineaRuta = null;
 
-        // el paquete guardado (como el "alumnos" del profe, pero es UNO solo: si no hay, queda null)
         let paquete = JSON.parse(localStorage.getItem("paquete"));
 
-        // --- TABLA --- como el MostrarALumnos del profe
         function MostrarTabla() {
             cuerpoTabla.innerHTML = "";
             contenedor.innerHTML = "";
@@ -85,21 +76,18 @@
                     "<td>" + paquete.fechaEntrega + "</td>" +
                     "<td><button id='btnModificar'>Modificar</button></td>";
                 cuerpoTabla.appendChild(tr);
-                // el botón se acaba de crear: ahora sí lo puedo agarrar por su id
                 document.getElementById("btnModificar").addEventListener("click", MostrarPanel);
             } else {
                 contenedor.innerHTML = "No hay envíos registrados";
             }
         }
 
-        // --- PANEL MODIFICAR ---
         function MostrarPanel() {
-            panelModificar.style.display = "block";   // lo hace visible
-            txtEstado.value = paquete.estado;          // el select muestra el estado actual
+            panelModificar.style.display = "block";
+            txtEstado.value = paquete.estado;
 
-            // el mapa se crea la primera vez que el panel ya se ve (si se crea escondido, sale mal dibujado)
             if (mapaRuta == null) {
-                mapaRuta = L.map("mapaRuta").setView([23.6, -102.5], 5);   // México
+                mapaRuta = L.map("mapaRuta").setView([23.6, -102.5], 5);
                 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
                     maxZoom: 19
                 }).addTo(mapaRuta);
@@ -109,12 +97,10 @@
             MostrarRuta();
         }
 
-        // Dibuja todo desde el paquete: origen, destino, cada punto y la línea
         function DibujarRuta() {
             if (mapaRuta == null) {
-                return;   // el panel todavía no se abre
+                return;
             }
-            // borrar lo que había dibujado
             marcadores.forEach(marcador => {
                 marcador.remove();
             });
@@ -130,7 +116,6 @@
             marcadores.push(L.marker([paquete.origen.lat, paquete.origen.lng]).addTo(mapaRuta).bindPopup("<b>Origen</b>"));
             marcadores.push(L.marker([paquete.destino.lat, paquete.destino.lng]).addTo(mapaRuta).bindPopup("<b>Destino</b>"));
 
-            // la línea empieza en el origen y pasa por cada punto de la ruta
             const puntos = [[paquete.origen.lat, paquete.origen.lng]];
             let n = 0;
             paquete.ruta.forEach(punto => {
@@ -138,14 +123,12 @@
                 marcadores.push(L.marker([punto.lat, punto.lng]).addTo(mapaRuta).bindPopup("Punto " + n + "<br>" + punto.fecha));
                 puntos.push([punto.lat, punto.lng]);
             });
-            // ya entregado: la línea llega hasta el destino
             if (paquete.estado == "Entregado") {
                 puntos.push([paquete.destino.lat, paquete.destino.lng]);
             }
             lineaRuta = L.polyline(puntos, { color: "red" }).addTo(mapaRuta);
         }
 
-        // Lista de puntos abajo del mapa (como el MostrarALumnos del profe)
         function MostrarRuta() {
             contenedorRuta.innerHTML = "";
             let n = 0;
@@ -160,18 +143,13 @@
             }
         }
 
-        MostrarTabla();   // al abrir o recargar la página
+        MostrarTabla();
 
-        // ============ ④ CREAR LA CONEXIÓN ============
-        // puerto: paqueteservidor/Properties/launchSettings.json   ruta: MapHub en Program.cs
         const conexion = new signalR.HubConnectionBuilder()
             .withUrl("http://localhost:5117/paquetes")
             .withAutomaticReconnect()
             .build();
 
-        // ============ ⑤ YO MANDO (invoke) ============
-
-        // --- 1. Agregar punto: clic en el mapa del panel ---
         async function onMapRutaClick(e) {
             if (paquete.estado == "Entregado") {
                 alert("El paquete ya se entregó: no se pueden agregar más puntos");
@@ -184,7 +162,6 @@
             }
         }
 
-        // --- 2. Cambiar estado ---
         btnCambiarEstado.addEventListener("click", async () => {
             if (paquete.estado == "Entregado") {
                 alert("El paquete ya se entregó: ya no se puede cambiar el estado");
@@ -201,14 +178,9 @@
             }
         });
 
-        // ============ ⑥ YO RECIBO (on) ============
-        // los nombres son IGUALES a los del SendAsync del Hub
-        // En cada uno: cambio el paquete, lo guardo en localStorage y vuelvo a mostrar
-
-        // --- 1. Llegó un envío nuevo (reemplaza al anterior) ---
         conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion) {
             paquete = {
-                id: 1,                                    // es UN solo paquete
+                id: 1,
                 origen: { lat: origenLat, lng: origenLng },
                 destino: { lat: destLat, lng: destLng },
                 precio: precio,
@@ -222,13 +194,11 @@
             localStorage.setItem("paquete", JSON.stringify(paquete));
             MostrarTabla();
             if (mapaRuta != null) {
-                MostrarPanel();   // si el panel estaba abierto, se actualiza con el paquete nuevo
+                MostrarPanel();
             }
         });
 
-        // --- 2. Llegó un punto nuevo de la ruta ---
         conexion.on("RecibirActualizacion", function (lat, lng, fecha) {
-            // sin paquete o ya entregado: se ignora (así un clic doble no agrega puntos de más)
             if (paquete == null || paquete.estado == "Entregado") {
                 return;
             }
@@ -238,9 +208,7 @@
             MostrarRuta();
         });
 
-        // --- 3. Cambió el estado ---
         conexion.on("EstadoCambiado", function (estado, fecha) {
-            // ya entregado: se ignora (así "Entregado" no se guarda dos veces)
             if (paquete == null || paquete.estado == "Entregado") {
                 return;
             }
@@ -248,10 +216,9 @@
             paquete.historial.push({ estado: estado, fecha: fecha });
             localStorage.setItem("paquete", JSON.stringify(paquete));
             MostrarTabla();
-            DibujarRuta();   // si se entregó, la línea llega al destino
+            DibujarRuta();
         });
 
-        // ============ ⑦ ARRANCAR LA CONEXIÓN ============
         conexion.start()
             .then(() => console.log("conexion exitosa"))
             .catch(e => console.log("Error al conectar: " + e));
