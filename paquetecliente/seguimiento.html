@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Seguimiento</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
+        h3, h4 { color: #0056b3; }
+        a { color: #0056b3; }
+        label { display: inline-block; width: 140px; }
+        input, select, button { padding: 6px; margin: 4px 0; }
+        button { background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        table { border-collapse: collapse; background-color: white; }
+        th, td { border: 1px solid #ccc; padding: 8px; }
+        th { background-color: #0056b3; color: white; }
+        #mapaFormulario, #mapaRuta, #mapaSeguimiento { border: 2px solid #0056b3; border-radius: 6px; }
+    </style>
 </head>
 <body>
 
@@ -129,7 +141,10 @@
         });
 
         conexion.on("RecibirActualizacion", function (lat, lng, fecha) {
-            if (paquete == null || paquete.estado == "Entregado") {
+            if (paquete == null) {
+                return;
+            }
+            if (paquete.estado == "Entregado") {
                 return;
             }
             paquete.ruta.push({ lat: lat, lng: lng, fecha: fecha });
@@ -138,7 +153,10 @@
         });
 
         conexion.on("EstadoCambiado", function (estado, fecha) {
-            if (paquete == null || paquete.estado == "Entregado") {
+            if (paquete == null) {
+                return;
+            }
+            if (paquete.estado == "Entregado") {
                 return;
             }
             paquete.estado = estado;
