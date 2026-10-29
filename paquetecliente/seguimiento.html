@@ -66,14 +66,14 @@
                 return;
             }
 
-            marcadores.push(L.marker([paquete.origen.lat, paquete.origen.lng]).addTo(mapSeg).bindPopup("<b>Origen</b>"));
-            marcadores.push(L.marker([paquete.destino.lat, paquete.destino.lng]).addTo(mapSeg).bindPopup("<b>Destino</b>"));
+            marcadores.push(L.marker([paquete.origen.lat, paquete.origen.lng]).addTo(mapSeg).bindPopup("<b>Origen:</b> " + paquete.origen.nombre));
+            marcadores.push(L.marker([paquete.destino.lat, paquete.destino.lng]).addTo(mapSeg).bindPopup("<b>Destino:</b> " + paquete.destino.nombre));
 
             const puntos = [[paquete.origen.lat, paquete.origen.lng]];
             let n = 0;
             paquete.ruta.forEach(punto => {
                 n++;
-                marcadores.push(L.marker([punto.lat, punto.lng]).addTo(mapSeg).bindPopup("Punto " + n + "<br>" + punto.fecha));
+                marcadores.push(L.marker([punto.lat, punto.lng]).addTo(mapSeg).bindPopup("<b>Punto " + n + ":</b> " + punto.nombre + "<br>" + punto.fecha));
                 puntos.push([punto.lat, punto.lng]);
             });
             if (paquete.estado == "Entregado") {
@@ -91,6 +91,7 @@
                     color = "green";
                 }
                 infoPaquete.innerHTML = "<b>Paquete " + paquete.tipo + "</b>" +
+                    " | De <b>" + paquete.origen.nombre + "</b> a <b>" + paquete.destino.nombre + "</b>" +
                     " | Estado: <b style='color:" + color + "'>" + paquete.estado + "</b>" +
                     " | Fecha de entrega: <b>" + paquete.fechaEntrega + "</b>";
 
@@ -98,7 +99,7 @@
                 paquete.ruta.forEach(punto => {
                     n++;
                     const p = document.createElement("p");
-                    p.innerHTML = "Punto " + n + ": " + punto.lat.toFixed(4) + ", " + punto.lng.toFixed(4) + " (" + punto.fecha + ")";
+                    p.innerHTML = "Punto " + n + ": <b>" + punto.nombre + "</b> (" + punto.fecha + ")";
                     contenedorRuta.appendChild(p);
                 });
                 if (n == 0) {
@@ -123,11 +124,11 @@
             .withAutomaticReconnect()
             .build();
 
-        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion) {
+        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion, origenNombre, destinoNombre) {
             paquete = {
                 id: 1,
-                origen: { lat: origenLat, lng: origenLng },
-                destino: { lat: destLat, lng: destLng },
+                origen: { lat: origenLat, lng: origenLng, nombre: origenNombre },
+                destino: { lat: destLat, lng: destLng, nombre: destinoNombre },
                 precio: precio,
                 tipo: tipo,
                 estado: "Recibido",
@@ -140,14 +141,14 @@
             MostrarPaquete();
         });
 
-        conexion.on("RecibirActualizacion", function (lat, lng, fecha) {
+        conexion.on("RecibirActualizacion", function (lat, lng, fecha, nombre) {
             if (paquete == null) {
                 return;
             }
             if (paquete.estado == "Entregado") {
                 return;
             }
-            paquete.ruta.push({ lat: lat, lng: lng, fecha: fecha });
+            paquete.ruta.push({ lat: lat, lng: lng, fecha: fecha, nombre: nombre });
             localStorage.setItem("paquete", JSON.stringify(paquete));
             MostrarPaquete();
         });

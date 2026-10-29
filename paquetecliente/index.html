@@ -62,12 +62,15 @@
         let destinoLat = 0;
         let destinoLng = 0;
         let marcadorDestino = null;
+        let origenNombre = "";
+        let destinoNombre = "";
 
         let paquete = JSON.parse(localStorage.getItem("paquete"));
 
         function MostrarPaquete() {
             if (localStorage.getItem("paquete")) {
-                contenedor.innerHTML = "<b>Paquete registrado:</b> " + paquete.tipo +
+                contenedor.innerHTML = "<b>Paquete registrado:</b> " + paquete.origen.nombre + " → " + paquete.destino.nombre +
+                    " | " + paquete.tipo +
                     " | Entrega: " + paquete.fechaEntrega +
                     " | Estado: " + paquete.estado +
                     " | Creado: " + paquete.fechaCreacion;
@@ -84,45 +87,40 @@
             maxZoom: 19
         }).addTo(mapForm);
 
-        function ObtenerUbicacion() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(GeoSuccess, GeoError);
-            } else {
-                lblOrigen.innerHTML = "<b>Origen:</b> tu navegador no tiene geolocalización";
-            }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async pos => {
+                miLatitud = pos.coords.latitude;
+                miLongitud = pos.coords.longitude;
+                L.marker([miLatitud, miLongitud]).addTo(mapForm).bindPopup("<b>Origen</b>").openPopup();
+                lblOrigen.innerHTML = "<b>Origen:</b> buscando el estado...";
+                try {
+                    const respuesta = await fetch("https://nominatim.openstreetmap.org/reverse?format=json&accept-language=es&lat=" + miLatitud + "&lon=" + miLongitud);
+                    const datos = await respuesta.json();
+                    origenNombre = datos.address.state;
+                } catch (error) {
+                    origenNombre = "Sin estado";
+                }
+                lblOrigen.innerHTML = "<b>Origen:</b> " + origenNombre;
+            });
         }
 
-        function GeoSuccess(posicion) {
-            miLatitud = posicion.coords.latitude;
-            miLongitud = posicion.coords.longitude;
-            L.marker([miLatitud, miLongitud]).addTo(mapForm).bindPopup("<b>Origen</b>").openPopup();
-            lblOrigen.innerHTML = "<b>Origen:</b> " + miLatitud.toFixed(4) + ", " + miLongitud.toFixed(4);
-        }
-
-        function GeoError(e) {
-            switch (e.code) {
-                case e.PERMISSION_DENIED:
-                    lblOrigen.innerHTML = "<b>Origen:</b> no diste permiso de ubicación (clic en el candado → Ubicación → Permitir)";
-                    break;
-                case e.POSITION_UNAVAILABLE:
-                    lblOrigen.innerHTML = "<b>Origen:</b> ubicación no disponible";
-                    break;
-                case e.TIMEOUT:
-                    lblOrigen.innerHTML = "<b>Origen:</b> tiempo de espera terminado, recarga la página";
-                    break;
-            }
-        }
-
-        ObtenerUbicacion();
-
-        function onMapClick(e) {
+        async function onMapClick(e) {
             destinoLat = e.latlng.lat;
             destinoLng = e.latlng.lng;
+            destinoNombre = "";
             if (marcadorDestino != null) {
                 marcadorDestino.remove();
             }
             marcadorDestino = L.marker([destinoLat, destinoLng]).addTo(mapForm).bindPopup("<b>Destino</b>").openPopup();
-            lblDestino.innerHTML = "<b>Destino:</b> " + destinoLat.toFixed(4) + ", " + destinoLng.toFixed(4);
+            lblDestino.innerHTML = "<b>Destino:</b> buscando el estado...";
+            try {
+                const respuesta = await fetch("https://nominatim.openstreetmap.org/reverse?format=json&accept-language=es&lat=" + destinoLat + "&lon=" + destinoLng);
+                const datos = await respuesta.json();
+                destinoNombre = datos.address.state;
+            } catch (error) {
+                destinoNombre = "Sin estado";
+            }
+            lblDestino.innerHTML = "<b>Destino:</b> " + destinoNombre;
         }
 
         mapForm.on("click", onMapClick);
@@ -134,15 +132,23 @@
 
         btnEnviar.addEventListener("click", async () => {
             if (miLatitud == 0) {
-                alert("Todavía no tengo tu ubicación (¿le diste Permitir?)");
+                alert("No hay ubicacion");
                 return;
             }
             if (destinoLat == 0) {
-                alert("Selecciona un destino en el mapa");
+                alert("Tienes que seleccionar el destino");
+                return;
+            }
+            if (origenNombre == "") {
+                alert("Buscando nombre del estado para origen");
+                return;
+            }
+            if (destinoNombre == "") {
+                alert("Buscando nombre del estado para destino");
                 return;
             }
             if (txtPrecio.value == "") {
-                alert("Escribe el precio (solo números)");
+                alert("Escribe el precio");
                 return;
             }
             if (txtFechaEntrega.value == "") {
@@ -150,7 +156,7 @@
                 return;
             }
             if (localStorage.getItem("paquete")) {
-                if (!confirm("Ya hay un paquete registrado. ¿Quieres reemplazarlo?")) {
+                if (!confirm("Ya hay un paquete registrado")) {
                     return;
                 }
             }
@@ -162,17 +168,19 @@
                     destinoLng,
                     txtPrecio.value,
                     txtTipo.value,
-                    txtFechaEntrega.value);
+                    txtFechaEntrega.value,
+                    origenNombre,
+                    destinoNombre);
             } catch (error) {
                 alert("error: " + error);
             }
         });
 
-        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion) {
+        conexion.on("RecibirEnvio", function (origenLat, origenLng, destLat, destLng, precio, tipo, fechaEntrega, fechaCreacion, origenNombre, destinoNombre) {
             paquete = {
                 id: 1,
-                origen: { lat: origenLat, lng: origenLng },
-                destino: { lat: destLat, lng: destLng },
+                origen: { lat: origenLat, lng: origenLng, nombre: origenNombre },
+                destino: { lat: destLat, lng: destLng, nombre: destinoNombre },
                 precio: precio,
                 tipo: tipo,
                 estado: "Recibido",
